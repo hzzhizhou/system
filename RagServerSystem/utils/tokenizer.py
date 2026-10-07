@@ -19,12 +19,19 @@ class ChineseTokenizer:
 
     def _init_tokenizer(self):
         """初始化分词器：加载词典、停用词、优化配置"""
-        # 1. 强制添加核心关键词（确保不被拆分）
-        jieba.add_word("分块")
-        jieba.add_word("rag")  # 小写兼容
-        jieba.add_word("RAG")
-        jieba.add_word("大模型")
-        jieba.add_word("私有化部署")
+        DOMAIN_TERM_FREQ = 10000
+        domain_terms = [
+            # 售后动作
+            "退货", "退款", "换货", "维修", "上门取件", "无理由退货", "七天无理由",
+            # 费用相关
+            "运费", "运费险", "价格保护",
+            # 凭证与时效
+            "发票", "保修", "保修期", "订单", "订单状态", "签收", "物流",
+            # 服务角色
+            "客服", "售后",
+        ]
+        for term in domain_terms:
+            jieba.add_word(term, freq=DOMAIN_TERM_FREQ)
 
         # 2. 加载停用词
         self.stop_words = self._load_stop_words()
@@ -66,28 +73,32 @@ class ChineseTokenizer:
         return re.sub(r"[^\u4e00-\u9fa5a-zA-Z0-9]", " ", text)
 
     def tokenize(self, text: str) -> List[str]:
-        """
-        标准分词接口（企业级）
-        返回：去重、去停用词、清洗后的关键词列表（统一小写）
-        """
-        # 1. 文本清洗
+        """清洗 → 精确分词 → 去停用词 → 统一小写；**保留重复词**（词频是 BM25 的输入）"""
         clean_text = self.clean_text(text)
         if not clean_text:
             return []
-
-        # 2. 精准分词（精确模式）
         tokens = jieba.lcut(clean_text, cut_all=False)
-
-        # 3. 过滤规则：去停用词+空字符串，统一转为小写
-        filtered_tokens = [
-            t.strip().lower() for t in tokens 
+        return [
+            t.strip().lower() for t in tokens
             if t.strip() and t.strip().lower() not in self.stop_words
         ]
 
-        # 4. 去重（保留顺序）
-        filtered_tokens = list(dict.fromkeys(filtered_tokens))
+    def tokenize_document(self, text: str) -> List[str]:
+        """文档侧分词：保留词频（不去重）。
+        BM25 靠「词频饱和（k1）」和「文档长度归一化（b / avgdl）」区分文档，
+        而这两项都以词频与真实长度为输入。若在这里去重，TF 恒为 1、文档长度退化成
+        "去重后的词表大小"（实测 avgdl 被低估 28%），打分只剩 IDF × 长度归一化。
+        后果不只是"同分"，而是**排序倒挂**：实测本项目语料查「退货」时，
+        出现 20 次的长块得 0.78 分，而只出现 1 次的短块得 1.24 分——
+        越相关的文档被长度惩罚压得越低。保留词频后两者变为 2.40 / 1.26，恢复正确序。
+        """
+        return self.tokenize(text)
 
-        return filtered_tokens
+    def tokenize_query(self, text: str) -> List[str]:
+        """查询侧分词：去重（保留首次出现顺序）。
+        查询是词袋，同一个词重复出现不代表更重要；而 rank_bm25 的 get_scores()会按查询 token 逐个累加，重复词会把该项的权重成倍放大，故查询侧必须去重。
+        """
+        return list(dict.fromkeys(self.tokenize(text)))
 
 # 全局单例分词器
 tokenizer = ChineseTokenizer()

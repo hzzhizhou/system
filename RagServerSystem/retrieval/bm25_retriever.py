@@ -41,7 +41,7 @@ class Bm25Retriever(BaseRetriever):
             documents = self.vector_store._get_all_documents()
             docs = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
-            tokenized_docs = [tokenizer.tokenize(doc) for doc in docs]
+            tokenized_docs = [tokenizer.tokenize_document(doc) for doc in docs]
             bm25 = BM25Okapi(tokenized_docs)
             log.info(f"bm25索引构建完成,总共{len(docs)}条文档")
             return bm25, docs, metadatas
@@ -80,7 +80,7 @@ class Bm25Retriever(BaseRetriever):
     def _get_relevant_documents(self, query: str, **kwargs) -> List[Document]:
         start_time = time.time()
         self._maybe_refresh_index()      # 同步/异步检索都走这里，统一在此校验索引新鲜度
-        tokens = tokenizer.tokenize(query)
+        tokens = tokenizer.tokenize_query(query)
         log.debug(f"分词结果：{tokens}")
         if not tokens:
             log.warning(f"查询分词为空 | 查询：{query[:50]}...")
@@ -96,10 +96,10 @@ class Bm25Retriever(BaseRetriever):
                 if score >= self.score_threshold
             ]
             
-            # 3. 对有效文档按「分数降序 + 文档长度降序」排序
+            # 3. 按分数降序取前 k 条（分数相同则保持库内原顺序，sorted 稳定）
             sorted_valid_indices = sorted(
                 valid_indices,
-                key=lambda i: (scores[i], len(self._docs[i])),
+                key=lambda i: scores[i],
                 reverse=True
             )[:self.k]  # 取前k条（最多k条）
             

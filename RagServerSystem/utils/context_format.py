@@ -29,7 +29,13 @@ def format_context_with_parents(
     normal_docs = []
     
     for doc in docs:
-        score = doc.metadata.get("fusion_score") or doc.metadata.get("rerank_score") or doc.metadata.get("vector_score", 0.0)
+        # 同一批文档来自同一条检索链路，分数口径一致：开启重排时是 rerank_score，
+        # 关闭时是融合分 / 余弦相似度。用 is None 判断，避免 0 分被当成"无分"跳过。
+        score = doc.metadata.get("rerank_score")
+        if score is None:
+            score = doc.metadata.get("fusion_score")
+        if score is None:
+            score = doc.metadata.get("vector_score", 0.0)
         parent_id = doc.metadata.get("parent_id")
         if parent_id and parent_id in parent_cache:
             if parent_id not in parent_scores:

@@ -52,7 +52,6 @@ CHUNKING_STRATEGY = "recursive"  # 可选: recursive, semantic, sliding_window, 
 #   - 子块 CHILD_CHUNK_SIZE=400 字符 ≈ 400 tokens < bge-base-zh-v1.5 的 512 上限，嵌入不截断
 #   - 父块不进向量库（仅存 parent_cache.json 供生成层补上下文），不受 512 限制
 #   - 父子回填目前只在 /rag/stream 生效，前端走 Agent 路径（search_knowledge 直接取块内容）
-# SEMANTIC_EMBEDDING_MODEL= "D:/RAG-Windows/AI大模型与智能体开发/models/bge-small-zh-v1.5"
 SEMANTIC_EMBEDDING_MODEL = "D:/RAG-Windows/AI大模型与智能体开发/models/bge-base-zh-v1.5"#--768维
 SEMANTIC_CHUNK_THRESHOLD = 0.75   # 句子相似度阈值（低于则切分）
 SEMANTIC_BUFFER_SIZE = 2           # 切分时前后保留的句子数
@@ -66,11 +65,6 @@ PARENT_CHUNK_OVERLAP = 200         # 父块重叠
 CHILD_CHUNK_SIZE = 400             # 子块大小
 CHILD_CHUNK_OVERLAP = 40           # 子块重叠
 
-# 表格块字符预算（CSV/DOCX/XLSX 的表格，见 ingestion.loader.table_loader）
-# 与 CHILD_CHUNK_SIZE 解耦：表格每块都要重复一遍表头，而表头宽度由列数决定，
-# 宽表（如 9 列的 CSV）表头+分隔行就占 140+ 字符。若沿用 400 的预算，留给数据行的
-# 只有 250 字符左右，一块只能装 1~2 行，整表被碎成大量「表头 + 一行」的块：
-# 40 行 FAQ 曾切成 28 块，且所有块以同一串表头开头，向量被表头稀释、区分度下降。
 TABLE_CHUNK_SIZE = 1000            # 表格块大小（表头 + 约 5~6 行）
 # 注意：该值需 ≤ 嵌入模型上限。当前 EMBEDDING_BACKEND="dashscope"（上限 8k token）安全；
 # 若切回本地 bge（512 token，中文约 1 字 1 token），1000 字符会超出而被静默截断。
@@ -78,10 +72,17 @@ TABLE_CHUNK_SIZE = 1000            # 表格块大小（表头 + 约 5~6 行）
 
 # 检索层配置
 RETRIEVER_K = 10                # 检索返回数量
-BM25_WEIGHT = 0.4              # 混合检索BM25权重
+
+# ============ 融合排序（多路召回 → 一个排序） 仅混合检索需要=========
+# rrf：标准 RRF，两路按名次累加 1/(k+rank)，与分数尺度无关、不需要权重（默认）
+# weighted：两路分数各自 Min-Max 归一化后按 BM25_WEIGHT/VECTOR_WEIGHT 加权
+# 两者同属融合层、二选一（不串联）；融合之后才做重排（Cross-Encoder）。
+FUSION_METHOD = "rrf"
+RRF_K = 60                      # RRF 平滑常数：越大越弱化相邻名次间的得分差距
+BM25_WEIGHT = 0.4              # weighted 策略下的 BM25 权重
 BM25_SCORE_THRESHOLD = 0.1      #阙值过滤
 
-# ====================== 文档类别预过滤（metadata filter） ======================
+# ==========文档类别预过滤（metadata filter） ==============
 # 检索前按问题关键词推断文档类别，先在 metadata 上缩小范围再检索（类别字段见
 # ingestion.loader.mysql_data_loader.derive_doc_category，落在每个块的 doc_category 上）；无关键词命中则不过滤，
 # 过滤后无结果时检索层会自动回退全库，避免"把正确文档挡在门外"。
@@ -92,10 +93,21 @@ DOC_CATEGORY_KEYWORDS = {
     "faq":     ["退货", "退款", "运费", "发票", "保修", "客诉", "缺件", "价格保护", "客服", "订单状态"],
 }
 
-VECTOR_WEIGHT = 0.6            # 混合检索向量权重
+VECTOR_WEIGHT = 0.6            # weighted 策略下的向量权重
 ROUTE_MODE = "rule"            # 路由模式：rule/llm/hybrid
+
+# ====================== 重排（融合结果 → Cross-Encoder 精排） ======================
 RERANK_TOP_N = 5
-RERANK_MODE = "score"
+# cross_encoder：用本地 Cross-Encoder 重排；none：关闭重排，直接返回融合序（可灰度/排障）
+RERANK_MODE = "cross_encoder"
+# 本地重排模型目录（BAAI/bge-reranker-base 的完整权重，非 sentence-transformers 缓存）
+# 容器内该目录默认不存在，需自行挂载并用环境变量覆盖；缺失时重排器会降级为不重排
+# （保持融合序并告警），不会让检索整体失败。
+RERANK_MODEL_PATH = os.getenv("RERANK_MODEL_PATH",
+                              str(BASE_DIR.parent / "models" / "bge-reranker-base"))
+# 送进 Cross-Encoder 的候选上限：CPU 下打分耗时与候选数成正比，截断以控延迟
+# （RERANK_TOP_N 是最终返回数，本值是打分规模，应 ≥ RERANK_TOP_N）
+RERANK_CANDIDATES = 20
 
 # 置信度门控阈值（量纲 = 余弦相似度 cos）
 # vector_score = 1 - distance/2：Chroma 建集合未指定度量 → 默认 l2，返回「平方」L2 距离；

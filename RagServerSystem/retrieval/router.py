@@ -31,11 +31,6 @@ class SmartRouter:
             start_time = time.time()
             if mode == "rule":
                 # 客服场景关键词：明确售后关键词走混合检索（BM25 保关键词精度 + 向量保语义）
-                # 说明：这里曾用纯 BM25。但纯 BM25 的结果不带 vector_score，置信度门控只能
-                # 回退读融合分，而 fusion_score = 0.4×norm_bm25 + 0.6×0，上限就是 0.4 <
-                # CONFIDENCE_LOW_THRESHOLD(0.5)，于是「退货运费由谁承担」这类问题被恒判低置信，
-                # Agent 侧据此直接转人工（实测同一问题 /rag/stream 能答、Agent 答不出）。
-                # 改走 hybrid 后向量分恢复存在，门控才能按绝对相似度正常判断。
                 keyword_patterns = ["退货", "退款", "运费", "发票", "保修", "物流", "订单", "签收", "换货", "维修"]
                 # 语义模糊求助走向量检索（语义理解）
                 semantic_patterns = ["怎么办", "怎么处理", "为什么", "如何", "能不能", "可以吗", "是不是", "帮我"]

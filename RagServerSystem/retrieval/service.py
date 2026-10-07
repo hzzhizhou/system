@@ -9,14 +9,16 @@ from typing import List, Tuple, Optional
 from langchain_core.documents import Document
 from config.settings import (
     ROUTE_MODE, CONFIDENCE_HIGH_THRESHOLD, CONFIDENCE_LOW_THRESHOLD,
-    CONFIDENCE_MARGIN_THRESHOLD, DOC_CATEGORY_PRIORITY, DOC_CATEGORY_KEYWORDS
+    CONFIDENCE_MARGIN_THRESHOLD, DOC_CATEGORY_PRIORITY, DOC_CATEGORY_KEYWORDS,
+    RERANK_MODE, RERANK_TOP_N
 )
 from logs.log_config import retrieval_layer_log as log
 from retrieval.bm25_retriever import Bm25Retriever
 from retrieval.vector_retriever import VectorRetriever
 from retrieval.async_hybrid_retriever import HybridRetriever
 from retrieval.router import SmartRouter
-from retrieval.reranker import ScoreReranker
+from retrieval.reranker import CrossEncoderReranker
+from retrieval.fusion import dedupe_docs
 from retrieval.query_enhancer import QueryEnhancer
 from shared.constants import looks_like_multi_question, split_sub_questions
 import time
@@ -25,13 +27,6 @@ import asyncio
 
 def infer_doc_categories(question: str) -> List[str]:
     """按问题关键词推断文档类别（检索前的 metadata 预过滤），返回所有命中的类别。
-
-    :return: DOC_CATEGORY_PRIORITY 排序后的类别列表（如 ["product", "faq"]）；无命中返回 []
-
-    为什么不只取优先级最高的那一个：「运费险能赔多少钱」同时命中 product（"多少钱"）
-    与 faq（"运费"），只留 product 会把真正答到问题的 平台FAQ(PLAT-013) 排除在候选之外，
-    实测置信度被压到 0.53（low）→ 用户得到"没查到资料"（B3）。类别是"问题涉及哪些领域"，
-    本就可能跨域，取并集过滤既缩小了范围，又不会把答案所在的那类文档整类丢掉。
     """
     text = (question or "").lower()
     return [category for category in DOC_CATEGORY_PRIORITY
@@ -48,11 +43,17 @@ class RetrievalService:
         self.vector_retriever = VectorRetriever(self.vector_store,self.embedding_service)
         self.hybrid_retriever = HybridRetriever(self.bm25_retriever, self.vector_retriever,self.embedding_service)
         self.router = SmartRouter(self.bm25_retriever, self.vector_retriever, self.hybrid_retriever, self.llm)
-        self.reranker = ScoreReranker()
+        # 重排器（Cross-Encoder）单独一层：融合负责把多路结果并成一个排序，重排再精排一次
+        self.reranker = CrossEncoderReranker() if RERANK_MODE == "cross_encoder" else None
+        if self.reranker is None:
+            log.info(f"RERANK_MODE={RERANK_MODE}，已关闭重排（直接返回融合序）")
         self.query_enhancer = QueryEnhancer(self.llm)
 
     async def _merge_results(self, docs: List[Document], original_question: str) -> List[Document]:
-        return await self.reranker.rerank(docs,original_question)
+        """融合结果 → 重排。关闭重排时仅去重并截断，顺序沿用融合结果。"""
+        if self.reranker is None:
+            return dedupe_docs(docs)[:RERANK_TOP_N]
+        return await self.reranker.rerank(docs, original_question)
 
     async def retrieve(self, question: str, route_mode: str = ROUTE_MODE,
                  use_context: bool = True,
@@ -269,8 +270,6 @@ class RetrievalService:
           2. 辅信号 = margin（top - 第二名），衡量排序稳定性
              - high 但 margin < 阈值 → 降级 medium（多个候选分数接近，排序不稳健）
 
-        为何不用 fusion_score：它是 Min-Max 批次内相对分，一批全是低相关结果时
-        top 仍会被归一化到 1.0 → 误判 high → 不转人工（企业客服漏转风险）
         """
         if not docs:
             return {
@@ -282,16 +281,12 @@ class RetrievalService:
                 "reason": "no_results"
             }
 
-        # 取绝对相似度：优先 vector_score（检索器一定写入），降级用 rerank_score/fusion_score
-        # 注意降级路径分数范围不稳定，仅作防御性兜底
+        # 取绝对相似度：只认 vector_score
+        # vector_score 是绝对分（余弦，[0,1]），而 rerank_score 是另一个模型的相关性打分、
+        # fusion_score 是批次内相对分，三者的量纲与 cos 阈值都不可比，所以不做降级，
+        # 缺失即记 0 分。
         def _abs_score(doc: Document) -> float:
-            v = doc.metadata.get("vector_score")
-            if v is not None:
-                return float(v)
-            r = doc.metadata.get("rerank_score")
-            if r is not None:
-                return float(r)
-            return float(doc.metadata.get("fusion_score", 0.0))
+            return float(doc.metadata.get("vector_score", 0.0))
 
         scores = sorted([_abs_score(doc) for doc in docs], reverse=True)
         top_score = scores[0]

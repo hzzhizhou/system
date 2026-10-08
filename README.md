@@ -41,12 +41,11 @@ AI大模型与智能体开发/
 │   ├── ingestion/              数据层：文档加载 · 文本清洗 · 分块 · 向量入库
 │   ├── infrastructure/         基础设施：Chroma · Redis · MySQL
 │   ├── shared/                 跨层共享：业务常量 · 话术模板 · 请求/响应 DTO
-│   ├── evaluation/             评估层：RAGAS（离线，无运行时消费者）
+│   ├── evaluation/             评估层：RAGAS 评测（30 题评测集 + 双臂对比，离线）
 │   ├── config/settings.py      全局配置（分块 / 检索 / 门控 / 熔断阈值）
 │   ├── utils/                  LLM 工厂 · 熔断器 · 安全 · Prometheus 指标
 │   ├── data/                   知识库语料（10 个文件：8 篇文档 + 2 份表格）
 │   ├── tests/                  pytest 单元测试（178 passed）
-│   ├── docs/                   架构图（PlantUML）· 架构说明 · DST 教学 demo
 │   ├── deploy/ logs/           依赖服务编排（Redis）· 日志配置与运行日志
 │   ├── e2e_*.py intent_*.py    开发期工具：在线端到端 / 意图评测与校准 / 入库检索验证（见 §9.2）
 │   └── main.py                 服务入口（uvicorn，8000 端口）
@@ -73,7 +72,7 @@ AI大模型与智能体开发/
 | 向量库 | Chroma（异步封装，单机持久化至 `vector_db-sql/`） |
 | 嵌入模型 | 默认 DashScope 云端 `qwen3.7-text-embedding`；可切本地 `bge-base-zh-v1.5`（768 维，CPU 推理约 13~17s/次） |
 | LLM | 通过 **DashScope OpenAI 兼容端点**（`compatible-mode/v1`）调用，模型名见 `config/settings.py` 的 `LLM_MODEL` |
-| 检索 | BM25 + 稠密向量混合检索、RRF 融合（0.4 / 0.6）、Score 重排序 |
+| 检索 | BM25 + 稠密向量混合检索、**RRF 融合（rank-based，`RRF_K=60`）**、**Cross-Encoder 重排（`bge-reranker-base`）**（`BM25_WEIGHT=0.4 / VECTOR_WEIGHT=0.6` 仅对可选的 `weighted` 融合策略生效） |
 | 会话记忆 | MySQL 为准（对话历史逐条落库）+ Redis 热缓存（不可用时回源查库，fail-open） |
 | 结构化持久化 | MySQL（订单、工单/转人工、用户账号、DST 会话状态、会话与消息） |
 | 监控 | Prometheus `/metrics`、健康检查 `/health`、接口限流 |
@@ -98,7 +97,7 @@ AI大模型与智能体开发/
 ├─────────────────────────────────────────────────────────────┤
 │  生成层        流式生成 · 合规护栏                          │
 ├─────────────────────────────────────────────────────────────┤
-│  检索层        路由 · 查询改写 · 混合检索 · RRF · 重排序      │
+│  检索层        路由 · 查询改写 · 混合检索 · RRF 融合 · 精排    │
 │                · 查询分解（多问题→逐子问检索）                │
 │                · 置信度门控（vector_score 绝对相似度）        │
 ├─────────────────────────────────────────────────────────────┤
@@ -120,7 +119,12 @@ AI大模型与智能体开发/
 
 - **自适应分块**：默认 `recursive`（按 Markdown 标题结构 + 768/128 递归切分）；
   `combined_splitter`（语义父块 2000 + 递归子块 400）保留为可选策略，父子回填仅 `/rag/stream` 生效。
-- **混合检索**：BM25 + 向量，RRF 融合权重 `BM25_WEIGHT=0.4 / VECTOR_WEIGHT=0.6`。
+- **混合检索**：BM25 + 向量双路召回，融合策略由 `FUSION_METHOD` 二选一——默认 **RRF（rank-based）**，
+  按名次累加 `1/(RRF_K + rank)`（`RRF_K=60`），与两路分数尺度无关、无需调权重；`weighted` 为备选，
+  两路分数各自 Min-Max 归一化后按 `BM25_WEIGHT=0.4 / VECTOR_WEIGHT=0.6` 加权。融合层与重排层**不串联**。
+- **Cross-Encoder 重排**：融合后取前 `RERANK_CANDIDATES=20` 条送本地 `bge-reranker-base`
+  （`RERANK_MODE="cross_encoder"`）逐条打分，按分降序返回前 `RERANK_TOP_N=5` 条。模型缺失或推理失败
+  **降级为融合序并告警**，不会让检索整体失败；置 `RERANK_MODE="none"` 可关闭重排、直接返回融合序（可灰度/排障）。
 - **查询分解（一次提多个问题）**：`split_sub_questions()` 按 `？/?/；/换行` 与显式连接词
   （另外/还有/以及/顺便…）做**确定性切分**（纯函数、可单测），拆不出多段但看着像多问题时才由 LLM 兜底拆一次；
   随后**逐子问独立检索**（各子问独占 `RERANK_TOP_N` 名额，不再互相挤占）、结果**交错合并去重**
@@ -135,7 +139,7 @@ AI大模型与智能体开发/
   **返回全部命中类别而非优先级最高的一个**——「运费险能赔多少钱」同时命中 `product`（"多少钱"）与
   `faq`（"运费"），只留 `product` 会把真正答到问题的 `平台FAQ(PLAT-013)` 整类排除，实测置信度被压到
   0.53(low) → 用户得到「没查到资料」。多类时用 `$in` 取并集：单类等值 / 多类并集 / 无命中不过滤 / 显式 `filter_metadata` 优先。
-- **重排序 + 置信度门控**：`vector_score = 1 - distance/2`（即**余弦相似度**；Chroma 默认返回平方 L2 距离且库内向量已单位化）
+- **置信度门控（基于绝对相似度）**：`vector_score = 1 - distance/2`（即**余弦相似度**；Chroma 默认返回平方 L2 距离且库内向量已单位化）
   做门控，阈值 `high ≥0.80 / low <0.55`，margin `0.08`（top 与第二名差距过小则 high 降级 medium），
   低置信**自动转人工**。不使用批次内归一化分数（全差批次 top 也会被拉到 1.0）。阈值分不开的
   「模型只吐无相关信息」情形另由**空答复兜底**接管：流式产出先缓冲，判定为占位答复
@@ -475,9 +479,11 @@ npm run dev:admin    # 终端 B：http://localhost:5174  → 登 admin，开 /ad
 
 ### 7.5 本地模型
 
-`models/` 不入库（约 656 MB）：本地 embedding 与重排序模型（`bge-base-zh-v1.5`、`bge-reranker-v2-m3`、
-`bge-small-zh-v1.5`）。当前 `EMBEDDING_BACKEND` 默认为 `"dashscope"`（云端约 0.5s），
-本地模型仅在切回 `"local"` 时使用；模型路径由 `config/settings.py` 中的**绝对路径**指定，换机器需同步修改。
+`models/` 不入库（约 656 MB）：本地 embedding 模型（`bge-base-zh-v1.5`、`bge-small-zh-v1.5`）与
+重排模型（`bge-reranker-base`，即 `RERANK_MODEL_PATH` 默认值；另有 `bge-reranker-v2-m3` 备选）。
+当前 `EMBEDDING_BACKEND` 默认为 `"dashscope"`（云端约 0.5s），嵌入模型仅在切回 `"local"` 时使用；
+重排模型在 `RERANK_MODE="cross_encoder"`（默认）时使用，两者均为 CPU 本地推理。
+模型路径由 `config/settings.py` 中的**绝对路径**指定，换机器需同步修改。
 
 ---
 
@@ -555,6 +561,7 @@ curl http://127.0.0.1:8000/health
 | `intent_calibration.py` | 置信度校准：可靠性表 + ECE + 兜底阈值扫描（复用 `intent_eval.CASES`） | 无 | 调 `INTENT_LLM_FALLBACK_CONFIDENCE` 时 |
 | `verify_dataset.py` | 离线检索命中验证（传 `fresh` 会**清空重建**向量库） | 无 | 改知识库 / 分块策略后 |
 | `e2e_online_test.py` / `e2e_business_eval.py` | 在线端到端（S0-S5 / 53 题业务评测） | **服务须在 8000 运行** | 部署验收 / 改业务逻辑后 |
+| `evaluation/service.py` | RAGAS 离线评测：30 题评测集（`evaluation/eval_set.json`）跑**双臂对比**（关闭 / 开启 Cross-Encoder 重排），输出四项指标 + 平均检索耗时 | 向量库已建、判分模型 key 有效 | 改检索 / 重排 / 生成层后量化效果 |
 
 > 「意图识别准确率多少」这类必须能报数字的问题，证据来自 `intent_eval.py` 与 `intent_calibration.py`
 > （实测：`rule` 76.5% / `hybrid` 81/81 / ECE 约 0.047 / LLM 兜底率 25%）；断言「某个句式必须判对」
@@ -583,8 +590,9 @@ curl http://127.0.0.1:8000/health
 - **置信度门控阈值**：采用 `vector_score = 1 - distance/2`（余弦相似度）绝对分
   （`high ≥0.80 / low <0.55`）+ 排序 margin(0.08)。旧实现用 `1/(1+distance)` 是量纲错配，
   会把 cos 0.34~0.79 压成 0.43~0.73，high/low 同时失效，已修正；阈值仍需要更多业务样本持续调优。
-- **检索延迟**：混合检索 + 重排序在纯 CPU 环境整体偏慢，RAG 单轮约 7~9s；
-  已用流式输出 + 同问缓存缓解，进一步可引入缓存层与向量索引优化。
+- **检索延迟**：纯 CPU 环境下 **Cross-Encoder 重排是主要耗时项**——平均单题检索耗时由关闭重排时约 0.4s
+  升至开启后约 11s（含首次模型懒加载约 20~25s）。已用流式输出 + 同问缓存缓解，进一步可引入缓存层、
+  向量索引优化，或将重排切到 GPU / 更小模型（`RERANK_MODE="none"` 可临时关闭重排）。
 - **查询分解的边界**：只按强分隔符 + 显式连接词切分，**逗号分隔的多问题**
   （「电池多大，运费怎么算？」）不拆（逗号作分隔会把单句切碎）；子问过多时上下文仍会被
   `MAX_CONTEXT_TOKENS` 截断（已用交错合并保证每个子问先保头部）。
@@ -640,7 +648,7 @@ RagServerSystem/                 # 每一层 = 一个同名顶层包，目录形
 │   └── splitter/               # 5 种分块策略 + 工厂
 ├── shared/                     # 跨层共享：constants（确定性业务规则 + 多问题拆分）+ reply_templates（话术）+ schemas（请求/响应 DTO）
 ├── evaluation/
-│   └── service.py              # 评估层：RAGAS 评估（无运行时消费者）
+│   └── service.py              # 评估层：RAGAS 评估
 ├── infrastructure/
 │   ├── vector_store/           # Chroma 异步封装
 │   ├── EmbeddingService/       # 嵌入服务

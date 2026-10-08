@@ -21,6 +21,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from config.settings import CHAT_HISTORY_WINDOW, DST_ENABLED
 from logs.log_config import log
+from utils.circuit_breaker import llm_breaker
 from shared.schemas import RAGRequest
 from service.cache import ResponseCache
 from infrastructure.chat_history_factory import init_chat_history
@@ -324,6 +325,13 @@ class AgentTurnService:
         pending = ""       # Final Answer 之后的正文缓冲（空答复判定用，见 _produce_rag）
         passthrough = False
         tool_calls_this_round = {"n": 0}   # 统计本轮工具调用（推进 EXECUTING 阶段）
+        # 熔断：LLM 连续失败时不再进入 ReAct 循环（否则「多轮工具调用 + 超时」会雪崩），
+        # 直接给确定性兜底话术。Agent 与 RAG 生成同用一个 DashScope LLM 后端，故共用 llm_breaker。
+        if not llm_breaker.allow_request():
+            log.warning(f"LLM 熔断中，Agent 跳过 ReAct 直接兜底 | 问题={question[:40]}")
+            final_text.append(AGENT_NO_ANSWER_FALLBACK)
+            await queue.put(AGENT_NO_ANSWER_FALLBACK)
+            return
         try:
             async for event in self.unified_agent.astream_events(
                 {"messages": turn.messages},
@@ -381,6 +389,8 @@ class AgentTurnService:
                         await queue.put(pending)
                         pending = ""
 
+            # LLM 流式产出正常结束：记为一次成功，CLOSED 态复位失败计数
+            llm_breaker.record_success()
             if seen_final:
                 # Final Answer 之后整段就是空答复（模型无据可依时的占位答复）：
                 # 对用户等于没答，换确定性兜底话术，不能把「无相关信息」原样抛给用户。
@@ -410,6 +420,7 @@ class AgentTurnService:
                         await queue.put(piece)
                     final_text.append("".join(pieces) or AGENT_NO_ANSWER_FALLBACK)
         except Exception as e:
+            llm_breaker.record_failure()
             log.error(f"Agent 流式失败: {e}", exc_info=True)
             # 不重推 final_text[-1]：该段此前已流给客户端，重推会让末尾内容重复一遍；
             # 若异常发生在一段正文都没产出时，补一句兜底话术，避免用户拿到空响应

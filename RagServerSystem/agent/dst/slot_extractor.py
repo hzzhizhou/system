@@ -16,6 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from utils.llm_factory import create_llm
+from utils.circuit_breaker import llm_breaker
 from logs.log_config import log
 from agent.dst.slot_schema import SLOT_SCHEMA, slot_prompt_desc, ORDER_ID_RE, AMOUNT_RE
 
@@ -126,30 +127,37 @@ class SlotExtractor:
             return {}
 
         merged: Dict[str, str] = {}
-        try:
-            raw = await self._chain.ainvoke({
-                "intent": intent,
-                "slot_desc": slot_prompt_desc(intent),
-                "question": question,
-                "existing": json.dumps(existing, ensure_ascii=False),
-            })
-            new = self._parse_json(raw)
-            # 白名单过滤 + 非空字符串化 + 格式校验
-            for k, v in new.items():
-                if k not in schema or not isinstance(v, (str, int, float)):
-                    continue
-                s = str(v).strip()
-                if not s:
-                    continue
-                # 若该槽位在 schema 中定义了格式正则，则必须匹配才接受（防 LLM 幻觉，
-                # 例如把订单号数字识别成 amount）。无正则的（如自由文本 reason）直接接受。
-                pat = schema[k].pattern
-                if pat is not None and not getattr(pat, "search", None)(s):
-                    log.info(f"槽位[{k}]值不匹配格式，丢弃: {s}")
-                    continue
-                merged[k] = s
-        except Exception as e:
-            log.warning(f"LLM 槽位提取失败，保留原槽位: {e}")
+        # 熔断：LLM 连续失败时跳过槽位提取，仅走正则兜底（关键槽位有正则通道，
+        # 缺槽位只是让流程多问一句，不会报错），避免雪崩
+        if not llm_breaker.allow_request():
+            log.warning("LLM 熔断中，槽位提取跳过 LLM，仅用正则兜底")
+        else:
+            try:
+                raw = await self._chain.ainvoke({
+                    "intent": intent,
+                    "slot_desc": slot_prompt_desc(intent),
+                    "question": question,
+                    "existing": json.dumps(existing, ensure_ascii=False),
+                })
+                llm_breaker.record_success()
+                new = self._parse_json(raw)
+                # 白名单过滤 + 非空字符串化 + 格式校验
+                for k, v in new.items():
+                    if k not in schema or not isinstance(v, (str, int, float)):
+                        continue
+                    s = str(v).strip()
+                    if not s:
+                        continue
+                    # 若该槽位在 schema 中定义了格式正则，则必须匹配才接受（防 LLM 幻觉，
+                    # 例如把订单号数字识别成 amount）。无正则的（如自由文本 reason）直接接受。
+                    pat = schema[k].pattern
+                    if pat is not None and not getattr(pat, "search", None)(s):
+                        log.info(f"槽位[{k}]值不匹配格式，丢弃: {s}")
+                        continue
+                    merged[k] = s
+            except Exception as e:
+                llm_breaker.record_failure()
+                log.warning(f"LLM 槽位提取失败，保留原槽位: {e}")
 
         # 正则兜底补充：仅在 LLM 未提取到该槽位时填充。
         # 不能整体覆盖——正则只能截到关键词（如把“商品有破损”截成“破”），

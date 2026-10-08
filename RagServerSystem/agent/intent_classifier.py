@@ -29,6 +29,7 @@ from config.settings import (
     INTENT_MODE, INTENT_LLM_FALLBACK_CONFIDENCE, INTENT_TOOL_MAP,
 )
 from logs.log_config import log
+from utils.circuit_breaker import llm_breaker
 
 # 意图规则数据（词表 + 政策句式正则）已外置到 agent/intent_rules.py，
 # 本文件只保留算法：打分、政策判定、LLM 兜底、三级级联。
@@ -149,11 +150,18 @@ class IntentClassifier:
     async def _llm_classify(self, question: str) -> str:
         if self._fallback_chain is None:
             return "consult"
+        # 熔断：LLM 连续失败时不再发起兜底调用（意图兜底本身可缺省），
+        # 直接回退规则默认意图，避免拖长响应并加重下游压力
+        if not llm_breaker.allow_request():
+            log.warning("LLM 熔断中，意图兜底跳过 LLM，回退 consult")
+            return "consult"
         try:
             result = await self._fallback_chain.ainvoke({"question": question})
+            llm_breaker.record_success()
             intent = result.strip().lower()
             return intent if intent in INTENT_TOOL_MAP else "consult"
         except Exception as e:
+            llm_breaker.record_failure()
             log.warning(f"LLM 意图兜底失败，回退 consult: {e}")
             return "consult"
 

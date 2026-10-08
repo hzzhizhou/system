@@ -94,6 +94,15 @@ def _no_dst(monkeypatch):
     monkeypatch.setattr(turn_service, "DST_ENABLED", False)
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_breaker():
+    """熔断器是模块级单例：用例间须复位，避免用例触发的失败累计把状态推进 OPEN 而相互影响。"""
+    from utils.circuit_breaker import llm_breaker
+    llm_breaker.record_success()   # record_success 会把状态复位为 CLOSED 并清零计数
+    yield
+    llm_breaker.record_success()
+
+
 @pytest.fixture
 def history(monkeypatch):
     """init_chat_history 替换为内存桩：RAG 生产者经它落库，断言直接读桩。"""

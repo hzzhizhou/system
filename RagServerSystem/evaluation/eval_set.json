@@ -1,0 +1,242 @@
+[
+  {
+    "id": "A01",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "我退货运费谁出啊",
+    "reference": "7天无理由退货的运费由消费者承担;因质量问题或商品与描述不符的退货,运费由商家承担。",
+    "source_ids": ["PLAT-011", "PLAT-012"]
+  },
+  {
+    "id": "A02",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "退款一般多久能到账",
+    "reference": "退款将在商家确认收到退货商品后1-3个工作日内原路退回至支付账户。银行卡支付可能需要额外1-2个工作日。",
+    "source_ids": ["PLAT-007"]
+  },
+  {
+    "id": "A03",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "我提交退货申请以后商家要审多久",
+    "reference": "商家需在收到退货申请后48小时内完成审核。超时未审核系统将自动通过申请。",
+    "source_ids": ["PLAT-006"]
+  },
+  {
+    "id": "A04",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "哪些东西是不能七天无理由退的",
+    "reference": "以下商品不支持7天无理由退货:已激活或已绑定账户的商品、已拆封或原包装缺失或防拆标撕毁的商品、定制类商品(如机身刻字,已开始生产的)。",
+    "source_ids": ["PLAT-002"]
+  },
+  {
+    "id": "A05",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "这个7天无理由的7天到底从哪天开始算啊",
+    "reference": "7天从签收次日零时开始计算,至第7天24时止。例如周一签收,下周一24时前均可申请退货。",
+    "source_ids": ["PLAT-003"]
+  },
+  {
+    "id": "A06",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "我手机拆开用过了还能退吗，退货对商品状态有啥要求",
+    "reference": "退货商品需保持完好状态,包括商品本体、配件、说明书、保修卡、原包装等齐全,且不影响二次销售。已使用、已损坏或包装严重破损的商品将影响退款。",
+    "source_ids": ["PLAT-004"]
+  },
+  {
+    "id": "A07",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "运费险是怎么赔的，大概能赔多少钱",
+    "reference": "平台赠送运费险的订单,退货完成后系统自动理赔至买家账户。理赔金额根据地区和重量计算,通常8-25元不等。",
+    "source_ids": ["PLAT-013"]
+  },
+  {
+    "id": "A08",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "手机有质量问题的话怎么退货啊",
+    "reference": "商品存在质量问题,可在签收后15天内申请退货退款,运费由商家承担。需上传商品问题照片作为凭证。",
+    "source_ids": ["PLAT-008"]
+  },
+  {
+    "id": "A09",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "手机的保修期是从什么时候开始算的",
+    "reference": "商品保修期自签收次日开始计算。需保留购物凭证或电子订单作为保修依据。",
+    "source_ids": ["PLAT-024"]
+  },
+  {
+    "id": "A10",
+    "category": "single_hop",
+    "answerable": true,
+    "question": "我想开个发票，怎么弄啊",
+    "reference": "下单时可在订单页面勾选需要发票并填写抬头信息,或下单后30天内联系商家补开发票。",
+    "source_ids": ["PLAT-019"]
+  },
+  {
+    "id": "B01",
+    "category": "product_param",
+    "answerable": true,
+    "question": "iPhone 15 各个容量分别卖多少钱",
+    "reference": "iPhone 15 售价 128GB 4999 元、256GB 5799 元、512GB 7599 元;A16 仿生芯片,6.1 英寸屏,整机保修 12 个月,电池保修 6 个月。",
+    "source_ids": ["PROD-001", "苹果iPhone15.md"]
+  },
+  {
+    "id": "B02",
+    "category": "product_param",
+    "answerable": true,
+    "question": "小米15现在的价格和主要配置是什么",
+    "reference": "小米 15 售价 12GB+256GB 4499 元、12GB+512GB 4799 元、16GB+512GB 4999 元;骁龙 8 至尊版,6.36 英寸 1.5K 直屏,徕卡三摄均为 5000 万像素,5400mAh 电池支持 90W 有线与 50W 无线充电。",
+    "source_ids": ["PROD-003", "小米15.md"]
+  },
+  {
+    "id": "B03",
+    "category": "product_param",
+    "answerable": true,
+    "question": "华为 Mate 60 Pro 什么价位，参数怎么样",
+    "reference": "华为 Mate 60 Pro 售价 12GB+256GB 6499 元、12GB+512GB 6999 元、12GB+1TB 7999 元;麒麟 9000S,6.82 英寸 OLED 四曲屏,支持天通卫星通话,5000 万像素十档物理可变光圈主摄,88W 有线快充。",
+    "source_ids": ["PROD-004", "华为Mate60Pro.md"]
+  },
+  {
+    "id": "B04",
+    "category": "product_param",
+    "answerable": true,
+    "question": "你们平台一共卖几款手机，都什么价位",
+    "reference": "平台只经营智能手机一个品类,共 3 款在售机型:iPhone 15(4999 元起,小屏 iOS)、小米 15(4499 元起,小尺寸直屏旗舰徕卡影像)、华为 Mate 60 Pro(6499 元起,大屏商务支持卫星通话)。",
+    "source_ids": ["PROD-005", "手机总览.md"]
+  },
+  {
+    "id": "B05",
+    "category": "product_param",
+    "answerable": true,
+    "question": "iPhone 15 除了价格，具体配置咋样",
+    "reference": "iPhone 15 机身约 171g,6.1 英寸 Super Retina XDR 屏,4800 万像素主摄,支持灵动岛、USB-C 接口与 MagSafe 无线充电,IP68 防尘抗水,适合偏好 iOS 生态与小屏轻便机型的用户。",
+    "source_ids": ["PROD-002"]
+  },
+  {
+    "id": "B06",
+    "category": "product_param",
+    "answerable": true,
+    "question": "我想买个能插内存卡的手机，你们哪款支持啊",
+    "reference": "仅华为 Mate 60 Pro 支持 NM 存储卡扩展,iPhone 15 与小米 15 均不支持存储卡扩展。",
+    "source_ids": ["手机总览.md", "华为Mate60Pro.md"]
+  },
+  {
+    "id": "C01",
+    "category": "process",
+    "answerable": true,
+    "question": "我想把这台手机退掉，整个流程是怎么走的",
+    "reference": "退货流程为:1.在订单页面申请退货;2.商家审核通过;3.填写物流单号寄回商品;4.商家确认收货;5.平台退款至原支付账户,通常1-3个工作日到账。商家须在收到申请后48小时内完成审核;用户须在申请通过后7天内寄出并回填物流单号。",
+    "source_ids": ["PLAT-005", "售后SOP.md"]
+  },
+  {
+    "id": "C02",
+    "category": "process",
+    "answerable": true,
+    "question": "我把货寄回去以后，商家多久确认收货",
+    "reference": "商家收到退货后须在 48 小时内确认;超时未确认,系统视为已收货。",
+    "source_ids": ["售后SOP.md", "PLAT-006"]
+  },
+  {
+    "id": "C03",
+    "category": "process",
+    "answerable": true,
+    "question": "我货都寄回去了，商家拖着一直不退款怎么办",
+    "reference": "用户在确认收货后超过 5 个工作日仍未收到退款的:先核查退款流水确认是未发起还是已发起未到账;未发起则催办商家并告知预计到账时间;商家拒绝或超时未处理的,引导用户申请平台介入,平台介入后 3 个工作日内完成审核,审核通过的强制退款。",
+    "source_ids": ["PLAT-010", "售后SOP.md"]
+  },
+  {
+    "id": "C04",
+    "category": "process",
+    "answerable": true,
+    "question": "手机买回来发现有性能故障，我想换一台，要怎么弄",
+    "reference": "自签收之日起 15 天内,商品出现性能故障的可申请换货,条件为:故障属商品本身质量问题、非人为损坏,附件、说明书、保修卡齐全,商品外观无明显磕碰、划痕。因质量问题换货的,来回运费均由商家承担。审核通过后用户寄回原商品,商家在收到后 48 小时内发出新商品;换新后保修期自新机签收次日重新计算。",
+    "source_ids": ["售后SOP.md", "客服FAQ.md"]
+  },
+  {
+    "id": "C05",
+    "category": "process",
+    "answerable": true,
+    "question": "收到的手机少了个配件，缺件漏发怎么处理啊",
+    "reference": "签收后 48 小时内联系客服并提供照片,核实后补寄配件,运费由商家承担,补寄时限不超过 3 个工作日;超过 48 小时申报的需提供开箱视频。",
+    "source_ids": ["PROD-009", "服务政策.md"]
+  },
+  {
+    "id": "D01",
+    "category": "cross_doc",
+    "answerable": true,
+    "question": "iPhone 15 屏摔碎了，这个给保吗，还有修大概要多久",
+    "reference": "iPhone 15 整机保修 12 个月,由 Apple 官方提供,可前往 Apple 授权服务网点处理;电池属消耗件,保修 6 个月。屏幕碎裂、进液、私自拆机或非官方维修后不在保修范围,需付费维修。维修周期常规 7-15 个工作日,网点可当场处理的故障 5-10 个工作日,需返厂的最长不超过 30 个工作日。",
+    "source_ids": ["苹果iPhone15.md", "客服FAQ.md"]
+  },
+  {
+    "id": "D02",
+    "category": "cross_doc",
+    "answerable": true,
+    "question": "华为 Mate 60 Pro 的电池质保多久，续航不行了怎么办",
+    "reference": "华为 Mate 60 Pro 整机保修 12 个月,由华为官方提供,可前往华为授权服务中心处理;电池属消耗件,保修 6 个月;非人为导致的续航异常可申请检测。屏幕碎裂、进液、私自拆机或非官方维修后不在保修范围,需付费维修。",
+    "source_ids": ["华为Mate60Pro.md"]
+  },
+  {
+    "id": "D03",
+    "category": "cross_doc",
+    "answerable": true,
+    "question": "我是金卡会员，买小米15能打折吗，积分怎么算",
+    "reference": "金卡会员累计消费满 5000 元,享商品 95 折,积分获取倍率 1.5 倍。积分按订单实际支付金额计算,消费 1 元累计 1 积分,运费、税费不计积分。折扣仅适用于参与折扣活动的商品,不适用于运费、税费及另行标明的特价商品。",
+    "source_ids": ["服务政策.md"]
+  },
+  {
+    "id": "D04",
+    "category": "cross_doc",
+    "answerable": true,
+    "question": "小米15我刷机刷坏了还能保修吗，修一次大概要多久",
+    "reference": "小米 15 整机保修 12 个月,可前往小米品牌授权服务中心处理;电池属消耗件,保修 6 个月。屏幕碎裂、进液、私自拆机或刷机导致的不在保修范围,需付费维修。常规维修周期 7-15 个工作日,网点可当场处理的故障 5-10 个工作日,需返厂等复杂维修最长不超过 30 个工作日。",
+    "source_ids": ["小米15.md", "服务政策.md"]
+  },
+  {
+    "id": "E01",
+    "category": "unanswerable",
+    "answerable": false,
+    "question": "你们有没有碎屏险可以买啊",
+    "reference": "知识库未收录该信息。正确行为是明确说明无法确认、不编造答案,并按《售后服务标准作业流程》8.1 条转入人工。",
+    "source_ids": []
+  },
+  {
+    "id": "E02",
+    "category": "unanswerable",
+    "answerable": false,
+    "question": "换个电池大概多少钱啊",
+    "reference": "知识库未收录该信息。正确行为是明确说明无法确认、不编造答案,并按《售后服务标准作业流程》8.1 条转入人工。",
+    "source_ids": []
+  },
+  {
+    "id": "E03",
+    "category": "unanswerable",
+    "answerable": false,
+    "question": "你们能不能上门维修啊，不想来回寄来寄去的",
+    "reference": "知识库未收录该信息。正确行为是明确说明无法确认、不编造答案,并按《售后服务标准作业流程》8.1 条转入人工。",
+    "source_ids": []
+  },
+  {
+    "id": "E04",
+    "category": "unanswerable",
+    "answerable": false,
+    "question": "我最近退了好几次货了，退货有没有次数上限啊",
+    "reference": "知识库未收录该信息。正确行为是明确说明无法确认、不编造答案,并按《售后服务标准作业流程》8.1 条转入人工。",
+    "source_ids": []
+  },
+  {
+    "id": "E05",
+    "category": "unanswerable",
+    "answerable": false,
+    "question": "你们有线下实体店吗，店开在哪啊，我想直接去店里买",
+    "reference": "知识库未收录该信息。正确行为是明确说明无法确认、不编造答案,并按《售后服务标准作业流程》8.1 条转入人工。",
+    "source_ids": []
+  }
+]
